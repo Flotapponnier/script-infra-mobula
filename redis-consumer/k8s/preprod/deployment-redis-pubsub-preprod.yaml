@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-consumer-pubsub-preprod
+  namespace: clickhouse-preprod
+  labels:
+    app: redis-consumer
+    redis-instance: pubsub-preprod
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-consumer
+      redis-instance: pubsub-preprod
+  template:
+    metadata:
+      labels:
+        app: redis-consumer
+        redis-instance: pubsub-preprod
+    spec:
+      containers:
+      - name: consumer
+        image: ftapponn/redis-consumer:v1.0.2
+        imagePullPolicy: Always
+        env:
+        - name: REDIS_HOST
+          value: "redis-pubsub-preprod-master.redis-pubsub-preprod.svc.cluster.local:6379"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-pubsub-password
+              key: password
+              optional: true
+        - name: CLICKHOUSE_HOST
+          value: "clickhouse.clickhouse-preprod.svc.cluster.local:9000"
+        - name: CLICKHOUSE_DB
+          value: "redis_tracking"
+        - name: REDIS_INSTANCE_NAME
+          value: "redis-pubsub-preprod"
+        - name: LOG_LEVEL
+          value: "info"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - pgrep -f redis-consumer
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - pgrep -f redis-consumer
+          initialDelaySeconds: 10
+          periodSeconds: 5
+      restartPolicy: Always
