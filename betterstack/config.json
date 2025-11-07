@@ -1,0 +1,342 @@
+{
+  "envs": ["api.zobula.xyz"],
+  "GroupName": "Zobula",
+  "default_monitor_settings": {
+    "monitor_type": "status",
+    "check_frequency": 300,
+    "email": false,
+    "sms": false,
+    "call": false,
+    "verify_ssl": true,
+    "follow_redirects": true,
+    "team_name": "Mobula Labs",
+    "push": true,
+    "critical_alert": false,
+    "paused": false,
+    "recovery_period": 180,
+    "confirmation_period": 0,
+    "regions": ["us", "eu", "as", "au"],
+    "request_timeout": 30,
+    "http_method": "GET",
+    "request_headers": [
+      {
+        "name": "Authorization",
+        "value": "eb66b1f3-c24b-4f43-9892-dbc5f37d5a6d"
+      }
+    ]
+  },
+  "endpoints": [
+    {
+      "path": "/api/1/all?fields=market_cap",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "all"
+    },
+    {
+      "path": "/api/1/blockchains",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "blockchains"
+    },
+    {
+      "path": "/api/1/feed/create",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "feed/create"
+    },
+    {
+      "path": "/api/1/feed/list",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "feed/list"
+    },
+    {
+      "path": "/api/1/market/blockchain/pairs?blockchain=ethereum&limit=10&offset=0",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "market/blockchain/pairs"
+    },
+    {
+      "path": "/api/1/market/blockchain/stats?blockchain=ethereum&factory=0x1234567890abcdef1234567890abcdef12345678",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "market/blockchain/stats"
+    },
+    {
+      "path": "/api/1/market/cefi/funding-rate?symbol=BTC&quote=USD",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "market/cefi/funding-rate"
+    },
+    {
+      "path": "/api/1/market/data?id=1234&asset=USDC&symbol=ETH-USDC",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "market/data"
+    },
+    {
+      "path": "/api/1/market/history?asset=Ethereum&blockchain=ethereum&period=7d&from=1677657600000&to=1709193600000",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "market/history"
+    },
+    {
+      "path": "/api/1/market/history/pair?asset=USDC&blockchain=ethereum&symbol=ETH-USDC&address=0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8&from=1677657600000&to=1709193600000&period=7d&limit=50&offset=0",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "market/history/pair"
+    },
+    {
+      "path": "/api/1/market/multi-data?shouldFetchPriceChange=24h&assets=0x6863fb62ed27a9ddf458105b507c15b5d741d62e&blockchains=mode",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "market/multi-data"
+    },
+    {
+      "path": "/api/1/market/multi-history?blockchains=ethereum&period=7d&from=1677657600000&to=1709193600000&assets=LayerZero",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "market/multi-history"
+    },
+    {
+      "path": "/api/1/market/multi-prices?shouldFetchPriceChange=24h&assets=0x6863fb62ed27a9ddf458105b507c15b5d741d62e&blockchains=mode",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "market/multi-prices"
+    },
+    {
+      "path": "/api/1/market/nft?asset=0x49c36afa15c7fdbd57ce3d61d80f39b6615a76ef&chain=ethereum",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "market/nft"
+    },
+    {
+      "path": "/api/1/market/pair?blockchain=8453&asset=0x69000e3992c31e2ab6e7d09e30b189c462f5623D&stats=true",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "market/pair"
+    },
+    {
+      "path": "/api/1/market/pairs?limit=50&offset=10&asset=DOGE&blockchain=ethereum",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "market/pairs"
+    },
+    {
+      "path": "/api/1/market/query?sortBy=market_cap&sortOrder=desc&filters=liquidity:1000:5000||price_change_24h:0:10&blockchain=ethereum&limit=100&offset=20&asset=PEPE",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "market/query"
+    },
+    {
+      "path": "/api/1/market/sparkline?blockchain=ethereum&symbol=BTC&timeFrame=7d&png=true",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "market/sparkline"
+    },
+    {
+      "path": "/api/1/market/token-vs-market?tag=ethereum",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "market/token-vs-market"
+    },
+    {
+      "path": "/api/1/market/token/holders?blockchain=ethereum&asset=Ethereum&limit=100&offset=0",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "market/token/holders"
+    },
+    {
+      "path": "/api/1/market/total",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "market/total"
+    },
+    {
+      "path": "/api/1/market/trades/pair?limit=50&offset=0&sortBy=date&sortOrder=asc&symbol=USDT",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "market/trades/pair"
+    },
+    {
+      "path": "/api/1/metadata?asset=Tether&symbol=USDT",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "metadata"
+    },
+    {
+      "path": "/api/1/metadata/categories",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "metadata/categories"
+    },
+    {
+      "path": "/api/1/metadata/news?symbols=BTC",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "metadata/news"
+    },
+    {
+      "path": "/api/1/metadata/nfts?address=0xb47e3cd837dDF8e4c57F05d70Ab865de6e193BBB&blockchain=ethereum",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "metadata/nfts"
+    },
+    {
+      "path": "/api/1/metadata/trendings?platform=Dexscreener",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "metadata/trendings"
+    },
+    {
+      "path": "/api/1/multi-metadata?assets=DiComp&blockchains=BNB",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "multi-metadata"
+    },
+    {
+      "path": "/api/1/search?input=token123&filters[blockchains]=ethereum&type=tokens",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "search"
+    },
+    {
+      "path": "/api/1/system-metadata",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "system-metadata"
+    },
+    {
+      "path": "/api/1/token/first-buyers?asset=0xdAC17F958D2ee523a2206206994597C13D831ec7",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "token/first-buyers"
+    },
+    {
+      "path": "/api/1/wallet/balance-usd?wallet=0xaF88370abD82EC6943cdB3D4ec7b764B92c35B43&portfolioId=12345",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "wallet/balance-usd"
+    },
+    {
+      "path": "/api/1/wallet/defi-positions?wallet=0xBb7Ae0458b0dAe031460E6EE9f014b275db49f7f&blockchains=ethereum&page=2&offset=50&limit=200&pagination=true",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "wallet/defi-positions"
+    },
+    {
+      "path": "/api/1/wallet/deployer?wallet=0xaF88370abD82EC6943cdB3D4ec7b764B92c35B43",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "wallet/deployer"
+    },
+    {
+      "path": "/api/1/wallet/history?wallet=0xaF88370abD82EC6943cdB3D4ec7b764B92c35B43&wallets=0xaF88370abD82EC6943cdB3D4ec7b764B92c35B43&accuracy=maximum&blockchains=ethereum,binance&asset=ETH&pnl=true&cache=false&stale=3600&recheck_contract=true&from=1704067200000&to=1735689600000&portfolio_settings=detailed&unlistedAssets=true&period=90d&accuracy=high&testnet=false",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "wallet/history"
+    },
+    {
+      "path": "/api/1/wallet/multi-portfolio",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "wallet/multi-portfolio"
+    },
+    {
+      "path": "/api/1/wallet/nfts?wallet=0xBb7Ae0458b0dAe031460E6EE9f014b275db49f7f&blockchains=ethereum&page=2&offset=50&limit=200&pagination=true",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "wallet/nfts"
+    },
+    {
+      "path": "/api/1/wallet/portfolio?wallet=4tqMHgB8jjbTgefVfqtVFYzyfQz2LQ8T3E922ePmt6kZ&wallets=4tqMHgB8jjbTgefVfqtVFYzyfQz2LQ8T3E922ePmt6kZ&portfolio=full&blockchains=solana&pnl=true&cache=false&stale=3600&recheck_contract=true&from=1704067200000&to=1735689600000&portfolio_settings=detailed&unlistedAssets=true&period=90d&accuracy=high&testnet=false",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "wallet/portfolio"
+    },
+    {
+      "path": "/api/1/wallet/smart-money",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "wallet/smart-money"
+    },
+    {
+      "path": "/api/1/wallet/trades?wallet=0xaF88370abD82EC6943cdB3D4ec7b764B92c35B43&wallets=0xaF88370abD82EC6943cdB3D4ec7b764B92c35B43,4tqMHgB8jjbTgefVfqtVFYzyfQz2LQ8T3E922ePmt6kZ&blockchains=ethereum,solana&trades=true&transactions=true&cache=false&stale=3600&recheckContract=true&from=1704067200000&to=1735689600000&unlistedAssets=true&onlyAssets=ETH,BTC&page=2&pagination=true",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "wallet/trades"
+    },
+    {
+      "path": "/api/1/wallet/transactions?wallet=0xaF88370abD82EC6943cdB3D4ec7b764B92c35B43&wallets=0xaF88370abD82EC6943cdB3D4ec7b764B92c35B43,4tqMHgB8jjbTgefVfqtVFYzyfQz2LQ8T3E922ePmt6kZ&blockchains=ethereum,solana&trades=true&transactions=true&cache=false&stale=3600&recheckContract=true&from=1704067200000&to=1735689600000&unlistedAssets=true&onlyAssets=ETH,BTC&page=2&pagination=true",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "wallet/transactions"
+    },
+    {
+      "path": "/api/2/fast-search?input=test",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "fast-search"
+    },
+    {
+      "path": "/api/2/market/details?blockchain=solana&address=8tzS7SkUZyHPQY7gLqsMCXZ5EDCgjESUHcB17tiR1h3Z",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "market/details"
+    },
+    {
+      "path": "/api/2/pulse",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "pulse"
+    },
+    {
+      "path": "/api/2/token/details?blockchain=solana&address=So11111111111111111111111111111111111111112",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "token/details"
+    },
+    {
+      "path": "/api/2/token/holder-positions?address=0x68bbed6a47194eff1cf514b50ea91895597fc91e&blockchain=ethereum&walletAddresses=0xe951d609c0a035a8fc02413f28f2b94342a9ec24&label=proTrader",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "token/holder-positions"
+    },
+    {
+      "path": "/api/2/token/trader-positions?address=0x68bbed6a47194eff1cf514b50ea91895597fc91e&blockchain=ethereum&walletAddresses=0xe951d609c0a035a8fc02413f28f2b94342a9ec24&label=proTrader",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "token/trader-positions"
+    },
+    {
+      "path": "/api/2/wallet/activity?wallet=0xaF88370abD82EC6943cdB3D4ec7b764B92c35B43&wallets=0xaF88370abD82EC6943cdB3D4ec7b764B92c35B43,4tqMHgB8jjbTgefVfqtVFYzyfQz2LQ8T3E922ePmt6kZ&blockchains=ethereum,solana&trades=true&transactions=true&cache=false&stale=3600&recheckContract=true&from=1704067200000&to=1735689600000&unlistedAssets=true&onlyAssets=ETH,BTC&page=2&pagination=true",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "wallet/activity"
+    },
+    {
+      "path": "/api/2/wallet/analysis?wallet=BTf4A2exGK9BCVDNzy65b9dUzXgMqB4weVkvTMFQsadd&blockchain=solana:solana",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "wallet/analysis"
+    },
+    {
+      "path": "/api/2/wallet/deployer?wallet=2wipLWuh3cnPbZQcd7SeQTiUCituu8m4WiPnS9JunZ15&limit=30&blockchain=solana:solana",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "wallet/deployer"
+    },
+    {
+      "path": "/api/2/wallet/positions?wallet=Ef7psBvfeCZUESiq4GEjmz9dfz992QSPLpUXs8XXbY1D&blockchain=solana",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "wallet/position"
+    },
+    {
+      "path": "/api/2/wallet/positions?wallet=Ef7psBvfeCZUESiq4GEjmz9dfz992QSPLpUXs8XXbY1D&limit=30&blockchain=solana:solana",
+      "shouldCall": false,
+      "monitor_settings": {},
+      "pronouncation_name": "wallet/positions"
+    }
+  ]
+}
