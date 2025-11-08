@@ -55,14 +55,18 @@ class DatadogAlertSummary:
             return []
 
     def extract_environment_from_name(self, name: str) -> str:
-        """Extrait l'environnement depuis le nom du monitor ([PREPROD] ou [PROD])"""
+        """Extrait l'environnement depuis le nom du monitor ([PREPROD] ou [PROD] et leurs variantes)"""
         import re
 
-        # Chercher [PREPROD] ou [PROD] dans le nom
-        if re.search(r'\[PREPROD\]', name, re.IGNORECASE):
+        # Chercher [PREPROD] ou [PREPROD xxx] dans le nom
+        if re.search(r'\[PREPROD(?:\s+[^\]]+)?\]', name, re.IGNORECASE):
             return "preprod"
-        elif re.search(r'\[PROD\]', name, re.IGNORECASE):
-            return "prod"
+        # Chercher [PROD] ou [PROD xxx] (comme [PROD GCP], [PROD AWS], etc.)
+        # mais PAS [PREPROD]
+        elif re.search(r'\[PROD(?:\s+[^\]]+)?\]', name, re.IGNORECASE):
+            # Vérifier que ce n'est pas PREPROD
+            if not re.search(r'\[PREPROD', name, re.IGNORECASE):
+                return "prod"
 
         # Fallback: utiliser les tags si pas trouvé dans le nom
         return None
@@ -244,30 +248,28 @@ class DatadogAlertSummary:
             current_value = self.get_monitor_current_value(monitor)
 
         # Remplacer {{value}} et {{threshold}} par les valeurs réelles si disponibles
-        # Sinon, supprimer complètement la partie qui contient la variable
+        # Sinon, supprimer UNIQUEMENT la variable en préservant le texte autour
         if "{{value}}" in name:
             if current_value is not None:
                 name = re.sub(r'\{\{value\}\}', str(current_value), name)
             else:
-                # Supprimer la partie avec {{value}} et les caractères environnants (- %, etc.)
-                name = re.sub(r'\s*-\s*\{\{value\}\}%?', '', name)
-                name = re.sub(r'\s*-\s*\{\{value\}\}\s*[a-zA-Z]*', '', name)
-                name = re.sub(r'\{\{value\}\}%?', '', name)
+                # Supprimer SEULEMENT {{value}}, garder le texte autour (bytes, %, etc.)
                 name = re.sub(r'\{\{value\}\}', '', name)
 
         if "{{threshold}}" in name:
-            # Les seuils ne sont généralement pas critiques à afficher
-            name = re.sub(r'\s*-\s*\{\{threshold\}\}%?', '', name)
+            # Supprimer SEULEMENT {{threshold}}, garder le texte autour
             name = re.sub(r'\{\{threshold\}\}', '', name)
 
         # Supprimer les autres templates Datadog ({{variable.name}}, {{pod_name}}, etc.)
         name = re.sub(r'\{\{[^}]+\.name\}\}', '', name)
         name = re.sub(r'\{\{[^}]+\}\}', '', name)
 
-        # Nettoyer les tirets orphelins et espaces multiples
+        # Nettoyer les espaces multiples et tirets mal formés
         name = re.sub(r'\s*-\s*-\s*', ' - ', name)  # Double tirets
-        name = re.sub(r'\s*-\s*$', '', name)  # Tiret à la fin
+        name = re.sub(r'\s+-\s+', ' - ', name)  # Normaliser les tirets avec espaces
         name = re.sub(r'\s+', ' ', name)  # Espaces multiples
+        # NE PAS supprimer les tirets à la fin - ils peuvent être significatifs
+        # name = re.sub(r'\s*-\s*$', '', name)  # Tiret à la fin
 
         return name.strip()
 
