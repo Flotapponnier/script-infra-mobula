@@ -40,13 +40,11 @@ class DatadogAlertSummary:
             response.raise_for_status()
             monitors = response.json()
 
-            # Filtrer uniquement les moniteurs avec tag env:preprod ou env:prod
+            # Filtrer uniquement les moniteurs contenant PROD ou PREPROD dans le nom
             filtered_monitors = []
             for monitor in monitors:
-                tags = monitor.get("tags", [])
-                has_preprod = any(tag == "env:preprod" for tag in tags)
-                has_prod = any(tag == "env:prod" for tag in tags)
-                if has_preprod or has_prod:
+                name = monitor.get("name", "").upper()
+                if "PREPROD" in name or "PROD" in name:
                     filtered_monitors.append(monitor)
 
             return filtered_monitors
@@ -55,20 +53,16 @@ class DatadogAlertSummary:
             return []
 
     def extract_environment_from_name(self, name: str) -> str:
-        """Extrait l'environnement depuis le nom du monitor ([PREPROD] ou [PROD] et leurs variantes)"""
-        import re
+        """Extrait l'environnement depuis le nom du monitor (PREPROD ou PROD)"""
+        name_upper = name.upper()
 
-        # Chercher [PREPROD] ou [PREPROD xxx] dans le nom
-        if re.search(r'\[PREPROD(?:\s+[^\]]+)?\]', name, re.IGNORECASE):
+        # Si contient PREPROD, c'est preprod (priorité à PREPROD)
+        if "PREPROD" in name_upper:
             return "preprod"
-        # Chercher [PROD] ou [PROD xxx] (comme [PROD GCP], [PROD AWS], etc.)
-        # mais PAS [PREPROD]
-        elif re.search(r'\[PROD(?:\s+[^\]]+)?\]', name, re.IGNORECASE):
-            # Vérifier que ce n'est pas PREPROD
-            if not re.search(r'\[PREPROD', name, re.IGNORECASE):
-                return "prod"
+        # Sinon si contient PROD, c'est prod
+        elif "PROD" in name_upper:
+            return "prod"
 
-        # Fallback: utiliser les tags si pas trouvé dans le nom
         return None
 
     def separate_monitors_by_environment(self, monitors: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
@@ -78,17 +72,9 @@ class DatadogAlertSummary:
 
         for monitor in monitors:
             name = monitor.get("name", "")
-            tags = monitor.get("tags", [])
 
-            # D'abord essayer d'extraire depuis le nom
+            # Extraire l'environnement depuis le nom uniquement
             env = self.extract_environment_from_name(name)
-
-            # Si pas trouvé dans le nom, utiliser les tags
-            if not env:
-                if any(tag == "env:preprod" for tag in tags):
-                    env = "preprod"
-                elif any(tag == "env:prod" for tag in tags):
-                    env = "prod"
 
             # Ajouter au bon groupe
             if env == "preprod":
@@ -187,33 +173,37 @@ class DatadogAlertSummary:
 
         return dict(grouped)
 
-    def get_monitor_current_value(self, monitor: Dict[str, Any]) -> str:
-        """Essaie d'extraire la valeur actuelle du monitor depuis son état"""
-        try:
-            # NOTE: L'API Datadog /api/v1/monitor ne retourne généralement pas
-            # les valeurs métriques actuelles dans la réponse. Ces valeurs sont
-            # seulement disponibles via /api/v1/monitor/{id} avec plus de détails
-            # ou en requêtant directement l'API metrics.
+    def get_monitor_groups(self, monitor: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Extrait tous les groupes en alerte d'un monitor"""
+        groups_info = []
 
-            # Pour l'instant, on essaie d'extraire ce qui est disponible
+        try:
             state = monitor.get("state", {})
             if isinstance(state, dict):
                 groups = state.get("groups", {})
                 if isinstance(groups, dict) and groups:
-                    # Prendre le premier groupe disponible
                     for group_name, group_data in groups.items():
                         if isinstance(group_data, dict):
-                            # Chercher un champ "value" ou "last_value"
-                            if "last_value" in group_data:
-                                return round(float(group_data["last_value"]), 2)
-                            if "value" in group_data:
-                                return round(float(group_data["value"]), 2)
+                            # Ne garder que les groupes en alerte/warn/no data
+                            group_status = group_data.get("status")
+                            if group_status in ["Alert", "Warn", "No Data"]:
+                                # Extraire la valeur si disponible
+                                value = None
+                                if "last_value" in group_data:
+                                    try:
+                                        value = round(float(group_data["last_value"]), 2)
+                                    except (ValueError, TypeError):
+                                        pass
 
-            # Fallback: chercher dans d'autres emplacements possibles
-            # Si aucune valeur trouvée, retourner None
-            return None
+                                groups_info.append({
+                                    "name": group_name,
+                                    "status": group_status,
+                                    "value": value
+                                })
+
+            return groups_info
         except (ValueError, TypeError, KeyError):
-            return None
+            return []
 
     def clean_monitor_name(self, name: str, state: str, monitor: Dict[str, Any] = None) -> str:
         """Nettoie le nom du monitor des templates Datadog et remplace les valeurs si possible"""
@@ -242,13 +232,15 @@ class DatadogAlertSummary:
                 if match:
                     name = match.group(1)
 
-        # Essayer d'obtenir la valeur actuelle du monitor
+        # Essayer d'obtenir la valeur actuelle du monitor depuis les groupes
         current_value = None
         if monitor:
-            current_value = self.get_monitor_current_value(monitor)
+            groups = self.get_monitor_groups(monitor)
+            # Si un seul groupe ou pas de groupes, on peut afficher la valeur dans le titre
+            if len(groups) <= 1 and groups:
+                current_value = groups[0].get("value")
 
-        # Remplacer {{value}} et {{threshold}} par les valeurs réelles si disponibles
-        # Sinon, supprimer UNIQUEMENT la variable en préservant le texte autour
+        # Remplacer {{value}} par la valeur réelle si disponible
         if "{{value}}" in name:
             if current_value is not None:
                 name = re.sub(r'\{\{value\}\}', str(current_value), name)
@@ -256,8 +248,8 @@ class DatadogAlertSummary:
                 # Supprimer SEULEMENT {{value}}, garder le texte autour (bytes, %, etc.)
                 name = re.sub(r'\{\{value\}\}', '', name)
 
+        # Supprimer {{threshold}}
         if "{{threshold}}" in name:
-            # Supprimer SEULEMENT {{threshold}}, garder le texte autour
             name = re.sub(r'\{\{threshold\}\}', '', name)
 
         # Supprimer les autres templates Datadog ({{variable.name}}, {{pod_name}}, etc.)
@@ -268,8 +260,7 @@ class DatadogAlertSummary:
         name = re.sub(r'\s*-\s*-\s*', ' - ', name)  # Double tirets
         name = re.sub(r'\s+-\s+', ' - ', name)  # Normaliser les tirets avec espaces
         name = re.sub(r'\s+', ' ', name)  # Espaces multiples
-        # NE PAS supprimer les tirets à la fin - ils peuvent être significatifs
-        # name = re.sub(r'\s*-\s*$', '', name)  # Tiret à la fin
+        name = re.sub(r'\s*-\s*$', '', name)  # Tiret à la fin
 
         return name.strip()
 
@@ -409,12 +400,34 @@ class DatadogAlertSummary:
                     # Nettoyer le nom du monitor et essayer d'extraire les valeurs
                     clean_name = self.clean_monitor_name(name, state, monitor)
 
+                    # Emoji selon le statut
+                    status_emoji = ""
+                    if state == "Alert":
+                        status_emoji = "🔴"
+                    elif state == "Warn":
+                        status_emoji = "🟡"
+                    elif state == "No Data":
+                        status_emoji = "⚪"
+
                     # Créer le lien hyperlien cliquable
                     if alert_id:
                         monitor_url = f"https://app.{self.dd_site}/monitors/{alert_id}"
-                        alert_lines.append(f"• <{monitor_url}|{clean_name}>")
+                        alert_lines.append(f"• {status_emoji} <{monitor_url}|{clean_name}>")
                     else:
-                        alert_lines.append(f"• {clean_name}")
+                        alert_lines.append(f"• {status_emoji} {clean_name}")
+
+                    # Afficher les groupes si présents
+                    groups = self.get_monitor_groups(monitor)
+                    if len(groups) > 1:  # Seulement si plusieurs groupes
+                        for group in groups:
+                            group_name = group["name"]
+                            group_value = group["value"]
+                            # Formater le nom du groupe (enlever les préfixes techniques)
+                            display_name = group_name.replace("_", " ").title()
+                            if group_value is not None:
+                                alert_lines.append(f"  ↳ {display_name}: {group_value}")
+                            else:
+                                alert_lines.append(f"  ↳ {display_name}")
 
                 # Ajouter toutes les alertes dans un seul bloc
                 blocks.append({
