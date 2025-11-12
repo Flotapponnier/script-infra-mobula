@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """
-Datadog Alert Summary Script
-Ce script récupère toutes les alertes actives de Datadog et envoie un résumé sur Slack
+Datadog Alert Summary Script - Version 3 (Final)
+Utilise l'API search pour récupérer toutes les alertes actives
+Simplifié sans extraction des group values (pour l'instant)
 """
 
 import os
 import sys
 import json
+import re
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from collections import defaultdict
+from urllib.parse import quote
 import requests
 
 
@@ -22,7 +25,7 @@ class DatadogAlertSummary:
         self.dd_site = os.getenv("DATADOG_SITE", "datadoghq.eu")
 
         if not all([self.dd_api_key, self.dd_app_key, self.slack_webhook_preprod, self.slack_webhook_prod]):
-            raise ValueError("Missing required environment variables: DATADOG_API_KEY, DATADOG_APP_KEY, SLACK_WEBHOOK_PREPROD, SLACK_WEBHOOK_PROD")
+            raise ValueError("Missing required environment variables")
 
         self.base_url = f"https://api.{self.dd_site}"
         self.headers = {
@@ -31,194 +34,207 @@ class DatadogAlertSummary:
             "Content-Type": "application/json"
         }
 
-    def get_all_monitors(self) -> List[Dict[str, Any]]:
-        """Récupère tous les moniteurs de Datadog (preprod et prod)"""
-        url = f"{self.base_url}/api/v1/monitor"
+    def get_all_monitors_search(self) -> List[Dict[str, Any]]:
+        """Récupère tous les moniteurs via l'API search (plus fiable)"""
+        url = f"{self.base_url}/api/v1/monitor/search"
+        params = {
+            "query": "(env:prod OR env:preprod OR env:staging)"
+        }
 
         try:
-            response = requests.get(url, headers=self.headers)
+            response = requests.get(url, headers=self.headers, params=params)
             response.raise_for_status()
-            monitors = response.json()
-
-            # Filtrer uniquement les moniteurs contenant PROD ou PREPROD dans le nom
-            filtered_monitors = []
-            for monitor in monitors:
-                name = monitor.get("name", "").upper()
-                if "PREPROD" in name or "PROD" in name:
-                    filtered_monitors.append(monitor)
-
-            return filtered_monitors
+            data = response.json()
+            return data.get("monitors", [])
         except requests.exceptions.RequestException as e:
-            print(f"Error fetching monitors from Datadog: {e}", file=sys.stderr)
+            print(f"❌ Error fetching monitors from Datadog: {e}", file=sys.stderr)
             return []
 
-    def extract_environment_from_name(self, name: str) -> str:
-        """Extrait l'environnement depuis le nom du monitor (PREPROD ou PROD)"""
-        name_upper = name.upper()
+    def get_active_alerts_search(self) -> List[Dict[str, Any]]:
+        """Récupère uniquement les alertes actives via l'API search"""
+        url = f"{self.base_url}/api/v1/monitor/search"
+        params = {
+            "query": 'status:(Alert OR Warn OR "No Data") AND (env:prod OR env:preprod OR env:staging)'
+        }
 
-        # Si contient PREPROD, c'est preprod (priorité à PREPROD)
-        if "PREPROD" in name_upper:
+        try:
+            response = requests.get(url, headers=self.headers, params=params)
+            response.raise_for_status()
+            data = response.json()
+            monitors = data.get("monitors", [])
+
+            # Enrichir chaque monitor avec ses group_states
+            print(f"   Fetching group states for {len(monitors)} alerts...")
+            for monitor in monitors:
+                monitor_id = monitor.get("id")
+                if monitor_id:
+                    groups = self._get_monitor_group_states(monitor_id)
+                    monitor["group_states"] = groups
+
+            return monitors
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Error fetching active alerts from Datadog: {e}", file=sys.stderr)
+            return []
+
+    def _get_monitor_group_states(self, monitor_id: int) -> List[Dict[str, Any]]:
+        """Récupère les group states d'un monitor spécifique"""
+        url = f"{self.base_url}/api/v1/monitor/{monitor_id}"
+        params = {"group_states": "all"}
+
+        try:
+            response = requests.get(url, headers=self.headers, params=params)
+            response.raise_for_status()
+            data = response.json()
+
+            # Extraire les groupes en alerte
+            state = data.get("state", {})
+            groups = state.get("groups", {})
+
+            result = []
+            if isinstance(groups, dict):
+                for group_name, group_data in groups.items():
+                    if isinstance(group_data, dict):
+                        status = group_data.get("status")
+                        # Ne garder que les groupes en alerte/warn/no data
+                        if status in ["Alert", "Warn", "No Data"]:
+                            result.append({
+                                "name": group_name,
+                                "status": status,
+                                "last_nodata_ts": group_data.get("last_nodata_ts")
+                            })
+
+            return result
+        except requests.exceptions.RequestException as e:
+            # Ne pas bloquer si l'appel échoue
+            return []
+
+    def _detect_environment(self, monitor: Dict[str, Any]) -> Optional[str]:
+        """Détecte l'environnement: tags > scopes > query > nom"""
+        # 1. Tags
+        tags = monitor.get("tags", [])
+        for tag in tags:
+            tag_lower = tag.lower()
+            if tag_lower.startswith("env:"):
+                env_value = tag_lower.split(":", 1)[1]
+                if "preprod" in env_value or "pre-prod" in env_value or env_value == "staging":
+                    return "preprod"
+                elif env_value == "prod" or env_value == "production":
+                    return "prod"
+
+        # 2. Scopes (nouveau dans search API)
+        scopes = monitor.get("scopes", [])
+        for scope in scopes:
+            scope_lower = scope.lower()
+            if "env:preprod" in scope_lower or "env:staging" in scope_lower:
+                return "preprod"
+            elif "env:prod" in scope_lower:
+                return "prod"
+
+        # 3. Query
+        query = monitor.get("query", "").lower()
+        if "env:preprod" in query or "env:staging" in query:
             return "preprod"
-        # Sinon si contient PROD, c'est prod
-        elif "PROD" in name_upper:
+        elif "env:prod" in query:
+            return "prod"
+
+        # 4. Nom (fallback)
+        name = monitor.get("name", "").upper()
+        if "PREPROD" in name or "PRE-PROD" in name:
+            return "preprod"
+        elif "PROD" in name and "PREPROD" not in name:
             return "prod"
 
         return None
 
-    def separate_monitors_by_environment(self, monitors: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
-        """Sépare les moniteurs par environnement (preprod vs prod)"""
-        preprod_monitors = []
-        prod_monitors = []
+    def _extract_service(self, monitor: Dict[str, Any]) -> str:
+        """Extrait le service depuis les tags"""
+        tags = monitor.get("tags", [])
+        for tag in tags:
+            if tag.startswith("service:"):
+                service = tag.split(":", 1)[1]
+                if service == "all":
+                    # Si service:all, essayer de déduire depuis les métriques
+                    metrics = monitor.get("metrics", [])
+                    if any("kubernetes" in m for m in metrics):
+                        return "KUBERNETES"
+                    return "SYSTEM"
+                return service.upper()
+
+        # Fallback: déduire depuis les métriques ou le nom
+        metrics = monitor.get("metrics", [])
+        name = monitor.get("name", "").lower()
+        query = monitor.get("query", "").lower()
+
+        if any("redis" in m for m in metrics) or "redis" in name or "redis" in query:
+            return "REDIS"
+        elif any("postgres" in m for m in metrics) or "postgres" in name or "database" in name:
+            return "POSTGRESQL"
+        elif any("kubernetes" in m for m in metrics) or "pod" in name or "container" in name:
+            return "KUBERNETES"
+        elif "disk" in name or "memory" in name or "cpu" in name:
+            return "SYSTEM"
+        else:
+            return "OTHER"
+
+    def separate_by_environment(self, monitors: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+        """Sépare les moniteurs par environnement"""
+        preprod = []
+        prod = []
 
         for monitor in monitors:
-            name = monitor.get("name", "")
-
-            # Extraire l'environnement depuis le nom uniquement
-            env = self.extract_environment_from_name(name)
-
-            # Ajouter au bon groupe
+            env = self._detect_environment(monitor)
             if env == "preprod":
-                preprod_monitors.append(monitor)
+                preprod.append(monitor)
             elif env == "prod":
-                prod_monitors.append(monitor)
+                prod.append(monitor)
 
-        return {
-            "preprod": preprod_monitors,
-            "prod": prod_monitors
-        }
+        return {"preprod": preprod, "prod": prod}
 
-    def calculate_statistics(self, monitors: List[Dict[str, Any]]) -> Dict[str, int]:
-        """Calcule les statistiques des moniteurs"""
-        total = len(monitors)
-        operational = 0
-        down = 0
-        paused = 0
-
+    def group_by_service(self, monitors: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+        """Groupe les moniteurs par service"""
+        grouped = defaultdict(list)
         for monitor in monitors:
-            overall_state = monitor.get("overall_state", "")
+            service = self._extract_service(monitor)
+            grouped[service].append(monitor)
+        return dict(grouped)
 
-            # Check if monitor is muted/paused
-            options = monitor.get("options", {})
-            if options.get("silenced", {}):
-                paused += 1
-            elif overall_state in ["OK"]:
-                operational += 1
-            elif overall_state in ["Alert", "Warn", "No Data"]:
-                down += 1
-            else:
-                operational += 1  # Default to operational
-
+    def calculate_statistics(self, all_monitors: List[Dict[str, Any]], active_alerts: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Calcule les statistiques"""
+        total = len(all_monitors)
+        down = len(active_alerts)
+        operational = total - down
         uptime = (operational / total * 100) if total > 0 else 100
 
         return {
             "total": total,
             "operational": operational,
             "down": down,
-            "paused": paused,
+            "paused": 0,  # TODO: extraire depuis muted_until_ts
             "uptime": uptime
         }
 
-    def get_active_alerts(self, monitors: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Filtre les moniteurs pour ne garder que ceux en alerte"""
-        active_alerts = []
-        for monitor in monitors:
-            if monitor.get("overall_state") in ["Alert", "Warn", "No Data"]:
-                active_alerts.append(monitor)
-        return active_alerts
+    def _format_group_name(self, group_name: str) -> str:
+        """Formate un nom de groupe pour l'affichage (ex: 'host:server1' -> 'Host: server1')"""
+        if ':' in group_name:
+            parts = group_name.split(':', 1)
+            key = parts[0].replace('_', ' ').title()
+            value = parts[1]
+            return f"{key}: {value}"
+        else:
+            return group_name.replace('_', ' ').title()
 
-    def group_alerts_by_service(self, alerts: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
-        """Regroupe les alertes par service/catégorie de manière intelligente"""
-        grouped = defaultdict(list)
+    def _clean_monitor_name(self, monitor: Dict[str, Any]) -> str:
+        """Nettoie le nom du monitor des templates Datadog"""
+        name = monitor.get("name", "Unknown")
+        status = monitor.get("status", "Unknown")
 
-        for alert in alerts:
-            tags = alert.get("tags", [])
-            name = alert.get("name", "Unknown")
-
-            # Extraire la catégorie de manière intelligente
-            category = None
-
-            # 1. Chercher le tag service:
-            for tag in tags:
-                if tag.startswith("service:"):
-                    category = tag.split(":", 1)[1].upper()
-                    break
-
-            # 2. Si pas de service, déduire depuis le nom du monitor
-            if not category:
-                name_lower = name.lower()
-                if "kubernetes" in name_lower or "pod" in name_lower or "deployment" in name_lower:
-                    category = "KUBERNETES"
-                elif "redis" in name_lower:
-                    category = "REDIS"
-                elif "postgres" in name_lower or "database" in name_lower:
-                    category = "POSTGRES"
-                elif "rabbitmq" in name_lower:
-                    category = "RABBITMQ"
-                elif "disk" in name_lower or "memory" in name_lower or "cpu" in name_lower or "load" in name_lower or "network" in name_lower:
-                    category = "SYSTEM"
-                else:
-                    category = "OTHER"
-
-            alert_data = {
-                "name": name,
-                "status": alert.get("overall_state", "Unknown"),
-                "message": alert.get("message", ""),
-                "id": alert.get("id"),
-                "query": alert.get("query", ""),
-                "tags": tags,
-                "monitor": alert  # Garder le monitor complet pour extraire les valeurs
-            }
-
-            grouped[category].append(alert_data)
-
-        return dict(grouped)
-
-    def get_monitor_groups(self, monitor: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Extrait tous les groupes en alerte d'un monitor"""
-        groups_info = []
-
-        try:
-            state = monitor.get("state", {})
-            if isinstance(state, dict):
-                groups = state.get("groups", {})
-                if isinstance(groups, dict) and groups:
-                    for group_name, group_data in groups.items():
-                        if isinstance(group_data, dict):
-                            # Ne garder que les groupes en alerte/warn/no data
-                            group_status = group_data.get("status")
-                            if group_status in ["Alert", "Warn", "No Data"]:
-                                # Extraire la valeur si disponible
-                                value = None
-                                if "last_value" in group_data:
-                                    try:
-                                        value = round(float(group_data["last_value"]), 2)
-                                    except (ValueError, TypeError):
-                                        pass
-
-                                groups_info.append({
-                                    "name": group_name,
-                                    "status": group_status,
-                                    "value": value
-                                })
-
-            return groups_info
-        except (ValueError, TypeError, KeyError):
-            return []
-
-    def clean_monitor_name(self, name: str, state: str, monitor: Dict[str, Any] = None) -> str:
-        """Nettoie le nom du monitor des templates Datadog et remplace les valeurs si possible"""
-        import re
-
-        # Si le nom contient des conditions is_alert/is_recovery/is_warning
-        if "{{#is_alert}}" in name and "{{/is_alert}}" in name:
-            # Extraire la partie qui correspond à l'état actuel
-            if state in ["Alert", "No Data"]:
-                # Extraire la partie alert
+        # Extraire la bonne section selon le statut
+        if "{{#is_alert}}" in name:
+            if status in ["Alert", "No Data"]:
                 match = re.search(r'\{\{#is_alert\}\}(.*?)\{\{/is_alert\}\}', name, re.DOTALL)
                 if match:
                     name = match.group(1)
-            elif state == "Warn":
-                # Essayer d'abord is_warning, puis fallback sur is_alert
+            elif status == "Warn":
                 match_warn = re.search(r'\{\{#is_warning\}\}(.*?)\{\{/is_warning\}\}', name, re.DOTALL)
                 if match_warn:
                     name = match_warn.group(1)
@@ -226,68 +242,21 @@ class DatadogAlertSummary:
                     match = re.search(r'\{\{#is_alert\}\}(.*?)\{\{/is_alert\}\}', name, re.DOTALL)
                     if match:
                         name = match.group(1)
-            else:
-                # Extraire la partie recovery
-                match = re.search(r'\{\{#is_recovery\}\}(.*?)\{\{/is_recovery\}\}', name, re.DOTALL)
-                if match:
-                    name = match.group(1)
 
-        # Essayer d'obtenir la valeur actuelle du monitor depuis les groupes
-        current_value = None
-        if monitor:
-            groups = self.get_monitor_groups(monitor)
-            # Si un seul groupe ou pas de groupes, on peut afficher la valeur dans le titre
-            if len(groups) <= 1 and groups:
-                current_value = groups[0].get("value")
-
-        # Remplacer {{value}} par la valeur réelle si disponible
-        if "{{value}}" in name:
-            if current_value is not None:
-                name = re.sub(r'\{\{value\}\}', str(current_value), name)
-            else:
-                # Supprimer SEULEMENT {{value}}, garder le texte autour (bytes, %, etc.)
-                name = re.sub(r'\{\{value\}\}', '', name)
-
-        # Supprimer {{threshold}}
-        if "{{threshold}}" in name:
-            name = re.sub(r'\{\{threshold\}\}', '', name)
-
-        # Supprimer les autres templates Datadog ({{variable.name}}, {{pod_name}}, etc.)
-        name = re.sub(r'\{\{[^}]+\.name\}\}', '', name)
+        # Supprimer tous les templates {{xxx}}
         name = re.sub(r'\{\{[^}]+\}\}', '', name)
 
-        # Nettoyer les espaces multiples et tirets mal formés
-        name = re.sub(r'\s*-\s*-\s*', ' - ', name)  # Double tirets
-        name = re.sub(r'\s+-\s+', ' - ', name)  # Normaliser les tirets avec espaces
-        name = re.sub(r'\s+', ' ', name)  # Espaces multiples
-        name = re.sub(r'\s*-\s*$', '', name)  # Tiret à la fin
+        # Nettoyer le formatting
+        name = re.sub(r'\s*-\s*-\s*', ' - ', name)
+        name = re.sub(r'\s+-\s+', ' - ', name)
+        name = re.sub(r'\s+', ' ', name)
+        name = re.sub(r'\s*-\s*$', '', name)
+        name = re.sub(r'^\s*-\s*', '', name)
 
         return name.strip()
 
-    def extract_alert_details(self, alert: Dict[str, Any]) -> str:
-        """Extrait les détails importants du message d'alerte"""
-        message = alert.get("message", "")
-        query = alert.get("query", "")
-
-        # Extraire les informations clés du message
-        details = []
-
-        # Chercher des valeurs numériques ou des seuils
-        if "{{value}}" in message or "{{threshold}}" in message:
-            # L'alerte contient des variables de template
-            details.append("Check Datadog for current values")
-
-        # Si le message est court, l'afficher directement
-        if message and len(message) < 150:
-            # Nettoyer le message des tags Slack/Datadog
-            clean_msg = message.split("@webhook")[0].split("@slack")[0].strip()
-            if clean_msg:
-                details.append(clean_msg)
-
-        return " | ".join(details) if details else ""
-
-    def format_slack_message(self, statistics: Dict[str, int], grouped_alerts: Dict[str, List[Dict[str, Any]]], environment: str = "prod") -> Dict[str, Any]:
-        """Formate le message Slack avec le résumé des alertes pour un environnement donné"""
+    def format_slack_message(self, statistics: Dict[str, Any], grouped_alerts: Dict[str, List[Dict[str, Any]]], environment: str) -> Dict[str, Any]:
+        """Formate le message Slack"""
         total_alerts = sum(len(alerts) for alerts in grouped_alerts.values())
         uptime = statistics["uptime"]
 
@@ -304,7 +273,7 @@ class DatadogAlertSummary:
 
         blocks = []
 
-        # Header avec statistiques globales
+        # Header
         blocks.append({
             "type": "header",
             "text": {
@@ -321,17 +290,13 @@ class DatadogAlertSummary:
             }
         })
 
-        # Statistiques globales dans un format compact
+        # Statistiques
         stats_text = (
             f"*Total Monitors*\n{statistics['total']}\n\n"
             f"*Operational*\n▸ {statistics['operational']}\n\n"
             f"*Down*\n:small_red_triangle_down: {statistics['down']}\n\n"
+            f"*Uptime*\n{uptime:.1f}%"
         )
-
-        if statistics['paused'] > 0:
-            stats_text += f"*Paused*\n:double_vertical_bar: {statistics['paused']}\n\n"
-
-        stats_text += f"*Uptime*\n{uptime:.1f}%"
 
         blocks.append({
             "type": "section",
@@ -343,17 +308,16 @@ class DatadogAlertSummary:
 
         blocks.append({"type": "divider"})
 
-        # Si aucune alerte, message positif
+        # Alertes
         if total_alerts == 0:
             blocks.append({
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": f":white_check_mark: *{environment.upper()} Environment - All Systems Operational*\n\nNo active alerts. All services are running smoothly!"
+                    "text": f":white_check_mark: *{environment.upper()} Environment - All Systems Operational*\n\nNo active alerts!"
                 }
             })
         else:
-            # Afficher les alertes par service
             blocks.append({
                 "type": "section",
                 "text": {
@@ -362,81 +326,186 @@ class DatadogAlertSummary:
                 }
             })
 
-            # Ordre de priorité pour les catégories
+            # Séparer les alertes par statut: Alert/Warn vs No Data
+            regular_alerts = {}
+            no_data_alerts = {}
+
+            for category, alerts in grouped_alerts.items():
+                regular = []
+                no_data = []
+                for alert in alerts:
+                    if alert.get("status") == "No Data":
+                        no_data.append(alert)
+                    else:
+                        regular.append(alert)
+
+                if regular:
+                    regular_alerts[category] = regular
+                if no_data:
+                    no_data_alerts[category] = no_data
+
+            # Priorités
             category_priority = {
-                "REDIS_PUBSUB": 0,
-                "REDIS": 1,
-                "POSTGRES": 2,
-                "RABBITMQ": 3,
-                "KUBERNETES": 4,
-                "SYSTEM": 5,
+                "REDIS": 0,
+                "POSTGRESQL": 1,
+                "RABBITMQ": 2,
+                "KUBERNETES": 3,
+                "SYSTEM": 4,
                 "OTHER": 99
             }
 
-            # Fonction de tri pour les catégories
-            def sort_categories(item):
-                category = item[0]
-                return (category_priority.get(category, 50), category)
+            # Afficher d'abord les alertes régulières (Alert/Warn)
+            if regular_alerts:
+                sorted_categories = sorted(
+                    regular_alerts.items(),
+                    key=lambda x: (category_priority.get(x[0], 50), x[0])
+                )
 
-            # Section pour chaque catégorie avec alertes
-            for category, alerts in sorted(grouped_alerts.items(), key=sort_categories):
-                # Header de catégorie
+                for category, alerts in sorted_categories:
+                    blocks.append({
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": f"🔴 *{category}*"
+                        }
+                    })
+
+                    # Créer un bloc séparé pour chaque alerte
+                    for monitor in alerts:
+                        alert_lines = []
+                        clean_name = self._clean_monitor_name(monitor)
+                        status = monitor.get("status", "Unknown")
+                        monitor_id = monitor.get("id", "")
+
+                        # Emoji
+                        if status == "Alert":
+                            emoji = "🔴"
+                        elif status == "Warn":
+                            emoji = "🟡"
+                        else:
+                            emoji = "⚫"
+
+                        # Lien vers Datadog
+                        if monitor_id:
+                            url = f"https://app.{self.dd_site}/monitors/{monitor_id}"
+                            alert_lines.append(f"• {emoji} <{url}|{clean_name}>")
+                        else:
+                            alert_lines.append(f"• {emoji} {clean_name}")
+
+                        # Afficher les sous-groupes si présents (limité à 5 max)
+                        group_states = monitor.get("group_states", [])
+                        if group_states:
+                            total_groups = len(group_states)
+                            # Limiter à 5 groupes max
+                            for group in group_states[:5]:
+                                group_name = self._format_group_name(group["name"])
+                                group_status = group["status"]
+
+                                # Emoji pour le groupe
+                                if group_status == "Alert":
+                                    group_emoji = "🔴"
+                                elif group_status == "Warn":
+                                    group_emoji = "🟡"
+                                elif group_status == "No Data":
+                                    group_emoji = "⚪"
+                                else:
+                                    group_emoji = "⚫"
+
+                                # Créer l'URL pour ce groupe spécifique
+                                if monitor_id:
+                                    encoded_group = quote(group['name'], safe='')
+                                    group_url = f"https://app.{self.dd_site}/monitors/{monitor_id}?group={encoded_group}"
+                                    alert_lines.append(f"  ↳ {group_emoji} <{group_url}|{group_name}>")
+                                else:
+                                    alert_lines.append(f"  ↳ {group_emoji} {group_name}")
+
+                            # Si plus de 5, afficher le compte avec lien vers le monitor
+                            if total_groups > 5:
+                                remaining = total_groups - 5
+                                if monitor_id:
+                                    all_groups_url = f"https://app.{self.dd_site}/monitors/{monitor_id}"
+                                    alert_lines.append(f"  ↳ <{all_groups_url}|... and {remaining} more>")
+                                else:
+                                    alert_lines.append(f"  ↳ ... and {remaining} more")
+
+                        # Un bloc par alerte (au lieu de toutes les alertes dans un seul bloc)
+                        blocks.append({
+                            "type": "section",
+                            "text": {
+                                "type": "mrkdwn",
+                                "text": "\n".join(alert_lines)
+                            }
+                        })
+
+            # Ajouter une section séparée pour les No Data
+            if no_data_alerts:
+                blocks.append({"type": "divider"})
                 blocks.append({
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": f"🔴 *{category.upper()}*"
+                        "text": "⚪ *[Alerts with No Data]*"
                     }
                 })
 
-                # Collecter toutes les alertes de cette catégorie
-                alert_lines = []
-                for alert in alerts:
-                    name = alert["name"]
-                    state = alert["status"]
-                    alert_id = alert.get("id", "")
-                    monitor = alert.get("monitor")
+                sorted_no_data = sorted(
+                    no_data_alerts.items(),
+                    key=lambda x: (category_priority.get(x[0], 50), x[0])
+                )
 
-                    # Nettoyer le nom du monitor et essayer d'extraire les valeurs
-                    clean_name = self.clean_monitor_name(name, state, monitor)
+                for category, alerts in sorted_no_data:
+                    blocks.append({
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": f"⚪ *{category}*"
+                        }
+                    })
 
-                    # Emoji selon le statut
-                    status_emoji = ""
-                    if state == "Alert":
-                        status_emoji = "🔴"
-                    elif state == "Warn":
-                        status_emoji = "🟡"
-                    elif state == "No Data":
-                        status_emoji = "⚪"
+                    # Créer un bloc séparé pour chaque alerte No Data
+                    for monitor in alerts:
+                        alert_lines = []
+                        clean_name = self._clean_monitor_name(monitor)
+                        monitor_id = monitor.get("id", "")
 
-                    # Créer le lien hyperlien cliquable
-                    if alert_id:
-                        monitor_url = f"https://app.{self.dd_site}/monitors/{alert_id}"
-                        alert_lines.append(f"• {status_emoji} <{monitor_url}|{clean_name}>")
-                    else:
-                        alert_lines.append(f"• {status_emoji} {clean_name}")
+                        # Lien vers Datadog
+                        if monitor_id:
+                            url = f"https://app.{self.dd_site}/monitors/{monitor_id}"
+                            alert_lines.append(f"• ⚪ <{url}|{clean_name}>")
+                        else:
+                            alert_lines.append(f"• ⚪ {clean_name}")
 
-                    # Afficher les groupes si présents
-                    groups = self.get_monitor_groups(monitor)
-                    if len(groups) > 1:  # Seulement si plusieurs groupes
-                        for group in groups:
-                            group_name = group["name"]
-                            group_value = group["value"]
-                            # Formater le nom du groupe (enlever les préfixes techniques)
-                            display_name = group_name.replace("_", " ").title()
-                            if group_value is not None:
-                                alert_lines.append(f"  ↳ {display_name}: {group_value}")
-                            else:
-                                alert_lines.append(f"  ↳ {display_name}")
+                        # Afficher les sous-groupes si présents (limité à 5 max)
+                        group_states = monitor.get("group_states", [])
+                        if group_states:
+                            total_groups = len(group_states)
+                            for group in group_states[:5]:
+                                group_name = self._format_group_name(group["name"])
 
-                # Ajouter toutes les alertes dans un seul bloc
-                blocks.append({
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": "\n".join(alert_lines)
-                    }
-                })
+                                # Créer l'URL pour ce groupe spécifique
+                                if monitor_id:
+                                    encoded_group = quote(group['name'], safe='')
+                                    group_url = f"https://app.{self.dd_site}/monitors/{monitor_id}?group={encoded_group}"
+                                    alert_lines.append(f"  ↳ ⚪ <{group_url}|{group_name}>")
+                                else:
+                                    alert_lines.append(f"  ↳ ⚪ {group_name}")
+
+                            if total_groups > 5:
+                                remaining = total_groups - 5
+                                if monitor_id:
+                                    all_groups_url = f"https://app.{self.dd_site}/monitors/{monitor_id}"
+                                    alert_lines.append(f"  ↳ <{all_groups_url}|... and {remaining} more>")
+                                else:
+                                    alert_lines.append(f"  ↳ ... and {remaining} more")
+
+                        # Un bloc par alerte
+                        blocks.append({
+                            "type": "section",
+                            "text": {
+                                "type": "mrkdwn",
+                                "text": "\n".join(alert_lines)
+                            }
+                        })
 
         blocks.append({"type": "divider"})
 
@@ -453,84 +522,85 @@ class DatadogAlertSummary:
 
         return {"blocks": blocks}
 
-    def send_to_slack(self, message: Dict[str, Any], environment: str = "prod") -> bool:
-        """Envoie le message sur Slack pour l'environnement donné"""
-        # Sélectionner le bon webhook selon l'environnement
+    def send_to_slack(self, message: Dict[str, Any], environment: str) -> bool:
+        """Envoie le message sur Slack"""
         webhook_url = self.slack_webhook_prod if environment == "prod" else self.slack_webhook_preprod
 
         try:
-            response = requests.post(
-                webhook_url,
-                json=message,
-                headers={"Content-Type": "application/json"}
-            )
+            # Debug: afficher la taille du message
+            message_json = json.dumps(message)
+            print(f"   Message size: {len(message_json)} bytes, {len(message.get('blocks', []))} blocks")
+
+            response = requests.post(webhook_url, json=message, headers={"Content-Type": "application/json"})
             response.raise_for_status()
-            print(f"Message sent to Slack ({environment}) successfully")
+            print(f"✅ Message sent to Slack ({environment}) successfully")
             return True
         except requests.exceptions.RequestException as e:
-            print(f"Error sending message to Slack ({environment}): {e}", file=sys.stderr)
+            print(f"❌ Error sending to Slack ({environment}): {e}", file=sys.stderr)
+            # Sauvegarder le message pour debug
+            with open(f"slack_message_{environment}_error.json", "w") as f:
+                json.dump(message, f, indent=2)
+            print(f"   Message saved to slack_message_{environment}_error.json for debugging")
             return False
 
     def run(self):
-        """Execute le processus complet pour preprod et prod"""
-        print("Starting Datadog Alert Summary for PREPROD and PROD environments")
+        """Execute le processus complet"""
+        print("=" * 60)
+        print("Datadog Alert Summary v3")
+        print("=" * 60)
 
-        # Récupérer tous les moniteurs (preprod + prod)
-        print("Fetching all monitors from Datadog...")
-        all_monitors = self.get_all_monitors()
-        print(f"Found {len(all_monitors)} total monitors")
+        # Récupérer tous les monitors
+        print("\n📡 Fetching all monitors...")
+        all_monitors = self.get_all_monitors_search()
+        print(f"   Found {len(all_monitors)} total monitors")
 
-        # Séparer les moniteurs par environnement
-        monitors_by_env = self.separate_monitors_by_environment(all_monitors)
-        preprod_monitors = monitors_by_env["preprod"]
-        prod_monitors = monitors_by_env["prod"]
-        print(f"Split: {len(preprod_monitors)} preprod monitors, {len(prod_monitors)} prod monitors")
+        # Récupérer les alertes actives
+        print("\n🚨 Fetching active alerts...")
+        active_alerts = self.get_active_alerts_search()
+        print(f"   Found {len(active_alerts)} active alerts")
 
-        # Traiter chaque environnement séparément
-        success_preprod = self._process_environment("preprod", preprod_monitors)
-        success_prod = self._process_environment("prod", prod_monitors)
+        # Séparer par environnement
+        all_by_env = self.separate_by_environment(all_monitors)
+        alerts_by_env = self.separate_by_environment(active_alerts)
 
-        # Retourner succès si au moins un environnement a réussi
+        print(f"\n📊 Environment split:")
+        print(f"   PREPROD: {len(all_by_env['preprod'])} total, {len(alerts_by_env['preprod'])} alerts")
+        print(f"   PROD: {len(all_by_env['prod'])} total, {len(alerts_by_env['prod'])} alerts")
+
+        # Traiter chaque environnement
+        success_preprod = self._process_environment("preprod", all_by_env["preprod"], alerts_by_env["preprod"])
+        success_prod = self._process_environment("prod", all_by_env["prod"], alerts_by_env["prod"])
+
+        print("\n" + "=" * 60)
         if success_preprod or success_prod:
             print("✅ Alert summaries sent successfully!")
             return 0
         else:
-            print("❌ Failed to send alert summaries", file=sys.stderr)
+            print("❌ Failed to send summaries")
             return 1
 
-    def _process_environment(self, environment: str, monitors: List[Dict[str, Any]]) -> bool:
+    def _process_environment(self, environment: str, all_monitors: List[Dict[str, Any]], active_alerts: List[Dict[str, Any]]) -> bool:
         """Traite un environnement spécifique"""
-        print(f"\n--- Processing {environment.upper()} environment ---")
+        print(f"\n--- Processing {environment.upper()} ---")
 
-        if not monitors:
-            print(f"No monitors found for {environment}")
+        if not all_monitors:
+            print(f"   ⚠️  No monitors found")
             return True
 
-        # Calculer les statistiques
-        statistics = self.calculate_statistics(monitors)
-        print(f"[{environment.upper()}] Statistics: {statistics['operational']} operational, {statistics['down']} down, {statistics['paused']} paused")
-
-        # Récupérer uniquement les alertes actives
-        active_alerts = self.get_active_alerts(monitors)
-        print(f"[{environment.upper()}] Found {len(active_alerts)} active alerts")
+        # Statistiques
+        statistics = self.calculate_statistics(all_monitors, active_alerts)
+        print(f"   📈 Stats: {statistics['operational']} OK | {statistics['down']} Down")
 
         # Grouper par service
-        grouped_alerts = self.group_alerts_by_service(active_alerts)
-        print(f"[{environment.upper()}] Alerts grouped by {len(grouped_alerts)} services")
+        grouped_alerts = self.group_by_service(active_alerts)
+        if grouped_alerts:
+            for category, alerts in grouped_alerts.items():
+                print(f"      • {category}: {len(alerts)} alerts")
 
-        # Formatter le message Slack
+        # Formatter et envoyer
         slack_message = self.format_slack_message(statistics, grouped_alerts, environment)
-
-        # Envoyer à Slack
-        print(f"[{environment.upper()}] Sending summary to Slack...")
-        success = self.send_to_slack(slack_message, environment)
-
-        if success:
-            print(f"[{environment.upper()}] ✅ Summary sent successfully!")
-        else:
-            print(f"[{environment.upper()}] ❌ Failed to send summary", file=sys.stderr)
-
-        return success
+        print(f"   📤 Sending to Slack...")
+        return self.send_to_slack(slack_message, environment)
 
 
 if __name__ == "__main__":
@@ -538,5 +608,7 @@ if __name__ == "__main__":
         summary = DatadogAlertSummary()
         sys.exit(summary.run())
     except Exception as e:
-        print(f"Fatal error: {e}", file=sys.stderr)
+        print(f"💥 Fatal error: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
