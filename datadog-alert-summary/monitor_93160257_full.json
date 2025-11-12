@@ -1,0 +1,45 @@
+{
+  "id": 93160257,
+  "org_id": 1000655470,
+  "type": "metric alert",
+  "name": "{{#is_alert}}[PROD] \ud83d\udd34 Node Memory High - {{host.name}} - {{value}}%{{/is_alert}}{{#is_recovery}}[PROD] \u2705 Node Memory Normal - {{host.name}} - {{value}}%{{/is_recovery}}",
+  "message": "**Kubernetes PROD - Node Memory High**\n\n**Environment:** `prod`\n**Node:** `{{host.name}}`\n**Memory Usage:** `{{value}}%`\n**Threshold:** `{{threshold}}%`\n\n**\ud83d\udea8 Impact:** High memory usage on node\n**\ud83d\udd0d Action:** Check memory consumption and workloads\n\n@webhook-slack-prod-k8s-workers",
+  "tags": [
+    "alert-type:node-memory",
+    "cluster:bare-metal-ovh",
+    "env:prod",
+    "managed-by:terraform",
+    "service:kubernetes"
+  ],
+  "query": "avg(last_5m):100 - avg:system.mem.pct_usable{env:prod} by {host} > 90",
+  "options": {
+    "include_tags": true,
+    "new_host_delay": 300,
+    "notify_no_data": false,
+    "renotify_interval": 30,
+    "require_full_window": false,
+    "thresholds": {
+      "critical": 90.0,
+      "warning": 80.0
+    },
+    "timeout_h": 1,
+    "notify_audit": false,
+    "silenced": {}
+  },
+  "multi": true,
+  "created_at": 1762644169000,
+  "created": "2025-11-08T23:22:49.337165+00:00",
+  "modified": "2025-11-08T23:22:49.337165+00:00",
+  "deleted": null,
+  "priority": null,
+  "restricted_roles": null,
+  "draft_status": "published",
+  "overall_state_modified": "2025-11-08T23:22:56+00:00",
+  "overall_state": "Alert",
+  "creator": {
+    "name": "Bob Uncle",
+    "email": "lyoncettenuit@gmail.com",
+    "handle": "lyoncettenuit@gmail.com",
+    "id": 1015203580
+  }
+}

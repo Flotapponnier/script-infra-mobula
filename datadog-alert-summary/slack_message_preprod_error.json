@@ -1,0 +1,99 @@
+{
+  "blocks": [
+    {
+      "type": "header",
+      "text": {
+        "type": "plain_text",
+        "text": "\ud83d\udea8 Infrastructure Health - 66.7% Operational"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": ":bar_chart: *System Overview - Critical Issues*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Total Monitors*\n15\n\n*Operational*\n\u25b8 10\n\n*Down*\n:small_red_triangle_down: 5\n\n*Uptime*\n66.7%"
+      }
+    },
+    {
+      "type": "divider"
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": ":office: *PREPROD Environment*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\ud83d\udd34 *POSTGRESQL*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2022 \ud83d\udd34 <https://app.datadoghq.eu/monitors/93160070|[PREPROD] \ud83d\udd34 PostgreSQL Disk /dev/md0 High - %>\n  \u21b3 \ud83d\udd34 <https://app.datadoghq.eu/monitors/93160070?group=host%3Apostgres-preprod-ovh-timeserie|Host: postgres-preprod-ovh-timeserie>"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\ud83d\udd34 *KUBERNETES*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2022 \ud83d\udd34 <https://app.datadoghq.eu/monitors/93160183|[PREPROD] \ud83d\udd34 Pod restarting frequently - restarts>\n  \u21b3 \ud83d\udd34 <https://app.datadoghq.eu/monitors/93160183?group=kube_namespace%3Aservices-preprod%2Cpod_name%3Alistener-apechain-6dd756785-5cjkr|Kube Namespace: services-preprod,pod_name:listener-apechain-6dd756785-5cjkr>\n  \u21b3 \ud83d\udd34 <https://app.datadoghq.eu/monitors/93160183?group=kube_namespace%3Aservices-preprod%2Cpod_name%3Alistener-solana-bonding-orca-84c564f9b6-x4gwc|Kube Namespace: services-preprod,pod_name:listener-solana-bonding-orca-84c564f9b6-x4gwc>\n  \u21b3 \ud83d\udfe1 <https://app.datadoghq.eu/monitors/93160183?group=kube_namespace%3Aservices-preprod%2Cpod_name%3Aparticle-api-64d4c9c7-75qj4|Kube Namespace: services-preprod,pod_name:particle-api-64d4c9c7-75qj4>\n  \u21b3 \ud83d\udd34 <https://app.datadoghq.eu/monitors/93160183?group=kube_namespace%3Aservices-preprod%2Cpod_name%3Aupdate-ranks-29381850-l5sxb|Kube Namespace: services-preprod,pod_name:update-ranks-29381850-l5sxb>\n  \u21b3 \ud83d\udd34 <https://app.datadoghq.eu/monitors/93160183?group=kube_namespace%3Aservices-preprod%2Cpod_name%3Alistener-avalanche-c-chain-7cf4f9dc59-szm48|Kube Namespace: services-preprod,pod_name:listener-avalanche-c-chain-7cf4f9dc59-szm48>\n  \u21b3 <https://app.datadoghq.eu/monitors/93160183|... and 126 more>\n\u2022 \ud83d\udd34 <https://app.datadoghq.eu/monitors/93160181|[PREPROD] \ud83d\udd34 Node Memory High - %>\n  \u21b3 \ud83d\udd34 <https://app.datadoghq.eu/monitors/93160181?group=host%3Astaging-master-azc-0-kub-preprod|Host: staging-master-azc-0-kub-preprod>\n  \u21b3 \ud83d\udd34 <https://app.datadoghq.eu/monitors/93160181?group=host%3Akub-worker-5-kub-preprod|Host: kub-worker-5-kub-preprod>\n  \u21b3 \ud83d\udd34 <https://app.datadoghq.eu/monitors/93160181?group=host%3Akub-worker-6-kub-preprod|Host: kub-worker-6-kub-preprod>\n  \u21b3 \ud83d\udd34 <https://app.datadoghq.eu/monitors/93160181?group=host%3Apostgres-main-preprod-ovh-1|Host: postgres-main-preprod-ovh-1>\n  \u21b3 \ud83d\udd34 <https://app.datadoghq.eu/monitors/93160181?group=host%3Aredis-pubsub-preprod-monitor|Host: redis-pubsub-preprod-monitor>\n  \u21b3 <https://app.datadoghq.eu/monitors/93160181|... and 18 more>\n\u2022 \ud83d\udd34 <https://app.datadoghq.eu/monitors/93160161|[PREPROD] \ud83d\udd34 Container terminated>\n  \u21b3 \ud83d\udd34 <https://app.datadoghq.eu/monitors/93160161?group=kube_namespace%3Aservices-preprod%2Cpod_name%3Aupdate-ranks-29381820-7wt6z|Kube Namespace: services-preprod,pod_name:update-ranks-29381820-7wt6z>\n  \u21b3 \ud83d\udd34 <https://app.datadoghq.eu/monitors/93160161?group=kube_namespace%3Aservices-preprod%2Cpod_name%3Aupdate-metatrendings-29381820-82tvr|Kube Namespace: services-preprod,pod_name:update-metatrendings-29381820-82tvr>\n  \u21b3 \ud83d\udd34 <https://app.datadoghq.eu/monitors/93160161?group=kube_namespace%3Aservices-preprod%2Cpod_name%3Aupdate-all-time-price-29381835-pf9lb|Kube Namespace: services-preprod,pod_name:update-all-time-price-29381835-pf9lb>\n  \u21b3 \ud83d\udd34 <https://app.datadoghq.eu/monitors/93160161?group=kube_namespace%3Aservices-preprod%2Cpod_name%3Aautomatic-listing-incremental-29381820-d9qcz|Kube Namespace: services-preprod,pod_name:automatic-listing-incremental-29381820-d9qcz>\n  \u21b3 \ud83d\udd34 <https://app.datadoghq.eu/monitors/93160161?group=kube_namespace%3Aservices-preprod%2Cpod_name%3Aautomatic-listing-incremental-29381850-gggwg|Kube Namespace: services-preprod,pod_name:automatic-listing-incremental-29381850-gggwg>\n  \u21b3 <https://app.datadoghq.eu/monitors/93160161|... and 42 more>"
+      }
+    },
+    {
+      "type": "divider"
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u26aa *[Alerts with No Data]*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u26aa *KUBERNETES*"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "\u2022 \u26aa <https://app.datadoghq.eu/monitors/93179532|[PREPROD] \ud83d\udd34 PVC Usage High - %>"
+      }
+    },
+    {
+      "type": "divider"
+    },
+    {
+      "type": "context",
+      "elements": [
+        {
+          "type": "mrkdwn",
+          "text": "Mobula Monitoring System | 2025-11-12 02:45:39 UTC"
+        }
+      ]
+    }
+  ]
+}

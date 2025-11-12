@@ -1,0 +1,12 @@
+{
+  "name": "betterstack-slack-monitor",
+  "version": "1.0.0",
+  "description": "Better Stack monitoring integration with Slack",
+  "main": "monitor-uptimes-endpoint.js",
+  "scripts": {
+    "start": "node monitor-uptimes-endpoint.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7"
+  }
+}
