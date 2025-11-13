@@ -1,0 +1,5 @@
+namespace                    = "cronjob"
+docker_image                 = "ftapponn/betterstack-monitor:latest"
+slack_webhook_url_production = "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+slack_webhook_url_staging    = "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+betterstack_api_token        = "your-betterstack-api-token"
