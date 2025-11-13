@@ -45,6 +45,13 @@ const fetchAllMonitors = async () => {
   return allMonitors;
 };
 
+const ensureHttps = (url) => {
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    return `https://${url}`;
+  }
+  return url;
+};
+
 const categorizeMonitors = (monitors) => {
   const categories = {
     production: [],
@@ -75,11 +82,6 @@ const categorizeMonitors = (monitors) => {
   });
 
   return categories;
-};
-
-const truncateUrl = (url, maxLength = 100) => {
-  if (url.length <= maxLength) return url;
-  return url.substring(0, maxLength) + "...";
 };
 
 const createEnvironmentStatusMessage = (
@@ -156,17 +158,16 @@ const createDownMonitorsMessage = (
       const name =
         monitor.attributes.pronounceable_name || monitor.attributes.url;
       const monitorId = monitor.id;
-      const monitorUrl = monitor.attributes.url;
+      const monitorUrl = ensureHttps(monitor.attributes.url);
       const betterStackUrl = `https://uptime.betterstack.com/team/t161704/monitors/${monitorId}`;
 
-      // Pour les URLs très longues (> 300 chars), afficher juste link
-      // Sinon afficher l'URL tronquée
-      const truncatedUrl = truncateUrl(monitorUrl, 120);
+      // Pour les URLs longues (> 100 chars), afficher juste "path" comme hyperlien
+      // Sinon afficher l'URL complète
       let pathDisplay;
-      if (monitorUrl.length > 300) {
-        pathDisplay = `<${monitorUrl}|link>`;
+      if (monitorUrl.length > 100) {
+        pathDisplay = `<${monitorUrl}|path>`;
       } else {
-        pathDisplay = `<${monitorUrl}|${truncatedUrl}>`;
+        pathDisplay = monitorUrl;
       }
 
       message += `• <${betterStackUrl}|${name}>\n  path: ${pathDisplay}\n`;
